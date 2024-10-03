@@ -20,6 +20,17 @@ class ArbitrageBot:
             Exchange.BITPRECO: {"max_req": 20, "window_time_ms": 100},
             Exchange.BINANCE: {"max_req": 20, "window_time_ms": 100},
         }
+        self.exchanges_endpoints = {
+            Exchange.BITPRECO: ["https://api.bitpreco.com"],
+            Exchange.BINANCE: [
+                "https://api.binance.com",
+                "https://api-gcp.binance.com",
+                "https://api1.binance.com",
+                "https://api2.binance.com",
+                "https://api3.binance.com",
+                "https://api4.binance.com",
+            ],
+        }  # Not used, but could be used to request another endpoint in case of failure
 
     def check_balance(self) -> None:
         for exchange in [Exchange.BITPRECO, Exchange.BINANCE]:
@@ -137,8 +148,8 @@ class ArbitrageBot:
         while True:
             for symbol in self.symbols:
                 start_time = time.time()
-
                 logging.debug(f"Checking arbitrage opportunity for: {symbol}")
+
                 bitpreco_bid, bitpreco_ask, binance_bid, binance_ask = self.get_prices(
                     symbol=symbol
                 )
@@ -165,8 +176,7 @@ class ArbitrageBot:
                             exchange_to_sell=Exchange.BITPRECO,
                             real_bid=real_bid,
                         )
-
-                if binance_bid and bitpreco_ask:
+                elif binance_bid and bitpreco_ask:
                     real_bid, real_ask = self.calculate_real_prices(
                         bid=binance_bid,
                         ask=bitpreco_ask,
