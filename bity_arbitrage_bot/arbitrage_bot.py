@@ -12,7 +12,7 @@ class ArbitrageBot:
             Exchange.BINANCE: {"BTC": 1000, "USDT": 1000, "ETH": 1000, "BRL": 1000},
         }
         self.exchange_fee_percent = {Exchange.BITPRECO: 0.02, Exchange.BINANCE: 0.03}
-        self.pnl = 0
+        self.pnl = 0  # BRL
         self.trading_amount = 5  # BRL
         self.min_profit_percent = 0.05
 
@@ -64,7 +64,6 @@ class ArbitrageBot:
         exchange_to_buy: Exchange,
         real_ask: float,
         exchange_to_sell: Exchange,
-        bid: float,
         real_bid: float,
     ) -> None:
         try:
@@ -74,15 +73,15 @@ class ArbitrageBot:
             coin = symbol.split("-")[1]
 
             # Buy
-            self.balance[exchange_to_buy][crypto] += self.trading_amount / real_ask
             self.balance[exchange_to_buy][coin] -= self.trading_amount
+            crypto_qty_added = self.trading_amount / real_ask
+            self.balance[exchange_to_buy][crypto] += crypto_qty_added
             self.pnl -= self.trading_amount
             # Sell
-            self.balance[exchange_to_sell][crypto] -= self.trading_amount / bid
-            self.balance[exchange_to_sell][coin] += (
-                self.trading_amount / bid
-            ) * real_bid
-            self.pnl += (self.trading_amount / bid) * real_bid
+            self.balance[exchange_to_sell][crypto] -= crypto_qty_added
+            coin_qty_added = crypto_qty_added * real_bid
+            self.balance[exchange_to_sell][coin] += coin_qty_added
+            self.pnl += coin_qty_added
 
             logging.debug("ARBITRAGE SUCCESS!!!")
             logging.info(f"Updated P&L: {self.pnl}")
@@ -125,10 +124,10 @@ class ArbitrageBot:
 
                 if binance_bid and bitpreco_ask:
                     real_bid, real_ask = self.calculate_real_prices(
-                        bid=bitpreco_bid,
-                        ask=binance_ask,
-                        bid_fee=self.exchange_fee_percent[Exchange.BITPRECO],
-                        ask_fee=self.exchange_fee_percent[Exchange.BINANCE],
+                        bid=binance_bid,
+                        ask=bitpreco_ask,
+                        bid_fee=self.exchange_fee_percent[Exchange.BINANCE],
+                        ask_fee=self.exchange_fee_percent[Exchange.BITPRECO],
                     )
                     is_arbitrage = self.check_arbitrage_opportunity(
                         real_bid=real_bid, real_ask=real_ask
