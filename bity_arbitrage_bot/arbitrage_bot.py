@@ -15,6 +15,32 @@ class ArbitrageBot:
         self.pnl = 0  # BRL
         self.trading_amount = 5  # BRL
         self.min_profit_percent = 0.05
+        self.interval_ms = 100
+        self.api_rate_limit = {
+            Exchange.BITPRECO: {"max_req": 20, "window_time_ms": 100},
+            Exchange.BINANCE: {"max_req": 20, "window_time_ms": 100},
+        }
+
+    def check_balance(self) -> None:
+        for exchange in [Exchange.BITPRECO, Exchange.BINANCE]:
+            if self.balance[exchange]["BRL"] < self.trading_amount:
+                msg = f"Insufficient BRL balance on exchange: {exchange}"
+                logging.error(msg)
+                raise Exception(msg)
+
+    def check_api_rate_limit(self) -> None:
+        REQS_PER_ARBITRAGE = 2
+        max_exchange_interval_ms = 0
+        for exchange in [Exchange.BITPRECO, Exchange.BINANCE]:
+            exchange_interval = (
+                self.api_rate_limit[exchange]["window_time_ms"]
+                / self.api_rate_limit[exchange]["max_req"]
+            )
+            max_exchange_interval_ms = max(
+                max_exchange_interval_ms, REQS_PER_ARBITRAGE * exchange_interval
+            )
+
+        self.interval_ms = max(self.interval_ms, max_exchange_interval_ms)
 
     def get_prices(self, symbol: str) -> tuple[float, float, float, float]:
         try:
@@ -66,6 +92,9 @@ class ArbitrageBot:
         exchange_to_sell: Exchange,
         real_bid: float,
     ) -> None:
+        buy_transaction = False
+        sell_transaction = False
+
         try:
             logging.debug("ARBITRAGE OPPORTUNITY FOUNDED! MAKING TRANSATIONS...")
 
@@ -77,11 +106,13 @@ class ArbitrageBot:
             crypto_qty_added = self.trading_amount / real_ask
             self.balance[exchange_to_buy][crypto] += crypto_qty_added
             self.pnl -= self.trading_amount
+            buy_transaction = True
             # Sell
             self.balance[exchange_to_sell][crypto] -= crypto_qty_added
             coin_qty_added = crypto_qty_added * real_bid
             self.balance[exchange_to_sell][coin] += coin_qty_added
             self.pnl += coin_qty_added
+            sell_transaction = True
 
             logging.debug("ARBITRAGE SUCCESS!!!")
             logging.info(f"Updated P&L: {self.pnl}")
@@ -89,11 +120,24 @@ class ArbitrageBot:
         except Exception as e:
             msg = f"Cannot make transactions: {e}"
             logging.error(msg)
+
+            # In case the transactions were made using real API
+            if buy_transaction and not sell_transaction:
+                # Check if sell_transaction did not occurred
+                # Try to make sell_transaction again
+                pass
+
             raise Exception(msg)
+
+    def wait_interval(self, elapsed_time_sec: float) -> None:
+        wait_sec = max(self.interval_ms / 1000 - elapsed_time_sec, 0)
+        time.sleep(wait_sec)
 
     def run(self) -> None:
         while True:
             for symbol in self.symbols:
+                start_time = time.time()
+
                 logging.debug(f"Checking arbitrage opportunity for: {symbol}")
                 bitpreco_bid, bitpreco_ask, binance_bid, binance_ask = self.get_prices(
                     symbol=symbol
@@ -142,4 +186,4 @@ class ArbitrageBot:
                             real_bid=real_bid,
                         )
 
-            time.sleep(5)
+                self.wait_interval(elapsed_time_sec=time.time() - start_time)
